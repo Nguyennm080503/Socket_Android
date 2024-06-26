@@ -1,11 +1,12 @@
 package com.hoangminhng.socketdemoclientapplication;
 
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -13,23 +14,33 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 public class MainActivity extends AppCompatActivity {
-    Thread Thread1 = null;
-    EditText etIP, etPort;
-    TextView tvMessages;
-    EditText etMessage;
-    Button btnSend;
-    Button btnConnect;
-    String SERVER_IP;
-    int SERVER_PORT;
+    private static final String TAG = "MainActivity";
+    private static int SERVER_PORT = 0;
+    private static String SERVER_IP = "";
+
+    private TextView tvMessages;
+    private EditText etMessage, etIP, etPort;
+    private Button btnSend, btnConnect;
+
+    private Socket socket;
+    private PrintWriter output;
+    private BufferedReader input;
+    private Thread socketThread;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
         etIP = findViewById(R.id.etIP);
         etPort = findViewById(R.id.etPort);
         tvMessages = findViewById(R.id.tvMessages);
@@ -37,14 +48,29 @@ public class MainActivity extends AppCompatActivity {
         btnSend = findViewById(R.id.btnSend);
         btnConnect = findViewById(R.id.btnConnect);
 
+        try {
+            SERVER_IP = getLocalIpAddress();
+            SERVER_PORT = findAvailablePort();
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
+
+        etIP.setText(SERVER_IP);
+        etPort.setText(String.valueOf(SERVER_PORT));
+
         btnConnect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                tvMessages.setText("");
-                SERVER_IP = etIP.getText().toString().trim();
-                SERVER_PORT = Integer.parseInt(etPort.getText().toString().trim());
-                Thread1 = new Thread(new Thread1());
-                Thread1.start();
+                String ip = etIP.getText().toString().trim();
+                String portStr = etPort.getText().toString().trim();
+
+                if (!ip.isEmpty() && !portStr.isEmpty()) {
+                    int port = Integer.parseInt(portStr);
+                    socketThread = new Thread(new SocketRunnable(ip, port));
+                    socketThread.start();
+                } else {
+                    tvMessages.append("Please enter valid IP and Port\n");
+                }
             }
         });
 
@@ -53,37 +79,64 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 String message = etMessage.getText().toString().trim();
                 if (!message.isEmpty()) {
-                    new Thread(new Thread3(message)).start();
+                    new Thread(new SendRunnable(message)).start();
                 }
             }
         });
     }
 
-    private PrintWriter output;
-    private BufferedReader input;
+    private String getLocalIpAddress() throws UnknownHostException {
+        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+        assert wifiManager != null;
+        WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+        int ipInt = wifiInfo.getIpAddress();
+        return InetAddress.getByAddress(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(ipInt).array()).getHostAddress();
+    }
 
-    class Thread1 implements Runnable {
+    private int findAvailablePort() {
+        try {
+            ServerSocket serverSocket = new ServerSocket(0);
+            int port = serverSocket.getLocalPort();
+            serverSocket.close();
+            return port;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return -1;
+        }
+    }
+
+    private class SocketRunnable implements Runnable {
+        private String ip;
+        private int port;
+
+        SocketRunnable(String ip, int port) {
+            this.ip = ip;
+            this.port = port;
+        }
+
+        @Override
         public void run() {
-            Socket socket = null;
             try {
                 socket = new Socket();
-                socket.connect(new InetSocketAddress(SERVER_IP, SERVER_PORT), 10000); // 10000 ms timeout
+                socket.connect(new InetSocketAddress(ip, port), 10000); // 10000 ms timeout
                 output = new PrintWriter(socket.getOutputStream(), true);
                 input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        tvMessages.setText("Connected\n");
+                        tvMessages.append("Connected\n");
                     }
                 });
-                new Thread(new Thread2()).start();
+
+                new Thread(new ReceiveRunnable()).start();
             } catch (IOException e) {
                 e.printStackTrace();
                 final String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown error";
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        tvMessages.setText("Connection failed: " + errorMessage + "\n");
+                        tvMessages.append("Connection failed: " + errorMessage + "\n");
                     }
                 });
                 if (socket != null && !socket.isClosed()) {
@@ -97,7 +150,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    class Thread2 implements Runnable {
+    private class ReceiveRunnable implements Runnable {
         @Override
         public void run() {
             while (true) {
@@ -117,8 +170,8 @@ public class MainActivity extends AppCompatActivity {
                                 tvMessages.append("Server disconnected\n");
                             }
                         });
-                        Thread1 = new Thread(new Thread1());
-                        Thread1.start();
+                        socketThread = new Thread(new SocketRunnable(etIP.getText().toString().trim(), Integer.parseInt(etPort.getText().toString().trim())));
+                        socketThread.start();
                         return;
                     }
                 } catch (IOException e) {
@@ -135,10 +188,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    class Thread3 implements Runnable {
+    private class SendRunnable implements Runnable {
         private String message;
 
-        Thread3(String message) {
+        SendRunnable(String message) {
             this.message = message;
         }
 

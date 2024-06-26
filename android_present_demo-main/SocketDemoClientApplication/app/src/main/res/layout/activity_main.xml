@@ -10,14 +10,14 @@
     <EditText
         android:id="@+id/etIP"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
         android:hint="IP-Address"
         android:inputType="text" />
 
     <EditText
         android:id="@+id/etPort"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
         android:layout_below="@+id/etIP"
         android:layout_marginTop="11dp"
         android:hint="Port No"
@@ -41,12 +41,13 @@
         android:layout_marginTop="-12dp"
         android:layout_marginBottom="11dp"
         android:inputType="textMultiLine"
-        android:textAppearance="@style/Base.TextAppearance.AppCompat.Medium" />
+        android:textAppearance="@style/Base.TextAppearance.AppCompat.Medium"
+        tools:ignore="TextViewEdits" />
 
     <EditText
         android:id = "@+id/etMessage"
         android:layout_width = "match_parent"
-        android:layout_height = "wrap_content"
+        android:layout_height = "48dp"
         android:layout_above = "@+id/btnSend"
         android:hint = "Enter Message"
         android:inputType = "text" />
